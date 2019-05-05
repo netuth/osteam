@@ -1,0 +1,133 @@
+#define _CRT_SECURE_NO_WARNINGS
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#define SIZE 100
+#define SYSSIZE 20
+
+int main() {
+
+	struct process {
+		int pid;
+		int arrive_time;	// 도착시간
+		int burst_time;	// 서비스 시간
+		int isexcute;	// 프로세스가 실행 중인지 판단할 변수 0 or 1의 값
+		int wait_time;	// 대기 시간
+	};
+
+	FILE* file = NULL;
+	char c[SIZE];
+	char* a, * b = NULL;
+
+	struct process sys[SYSSIZE], copy_sys[SYSSIZE], temp_sys[SYSSIZE];
+	int waittime_sum = 0;
+	float average_wait_time = 0.0;
+	int count = 0, i, t;	// count:프로세스 개수
+
+	int max_wait_index = 0, isinrpt = 1, temp_time = 0, exit = 0;
+	int Norm_turnaround_time = 0;
+	// 순서대로
+	// 가장 오래 기다린 프로세스 인덱스, 클럭 인터럽트 발생 여부 결정 변수 0 or 1의 값
+	// 임시 시간 변수, 종료된 프로세스 개수
+
+	int time_quantum = 4, time_total = 0;
+	// (q=4),	총 걸린 시간
+
+	memset(sys, 0, sizeof(sys));
+
+
+	//1. input.txt 파일에서 값 얻어와 저장
+	file = fopen("input.txt", "r");
+	if (file == NULL) {
+		printf("파일 탐색 실패");
+		return -1;
+	}
+	else {
+		printf("파일 탐색 성공\n");
+	}
+	while (fgets(c, SIZE, file) != NULL) {
+
+		if (c[0] == '\n') continue;	// 빈줄 넘어가기
+
+		//c[SIZE - 1] = '\0';
+
+		a = strtok(c, " ");
+		if (*a == '0') {	//pid로 0이 들어오면 입력 종료
+			
+			break;
+		}
+		sys[count].pid = atoi(a);
+
+		a = strtok(NULL, " ");
+		sys[count].arrive_time = atoi(a);
+		a = strtok(NULL, " ");
+		sys[count].burst_time = atoi(a);
+
+		count++;	// 프로세스 개수 증가
+	}
+	fclose(file);	//파일 닫기
+
+	
+	for (i = 0; i < count; i++) {	// 초기 프로세스의 상태를 copy
+		copy_sys[i] = sys[i];
+		
+	}
+	printf("\nPID\t\tBurst Time\t Arrival Time\t End Time\t Turnaround Time\t Normalized Turnaround Time\n");
+	printf("---------------------------------------------------------------------------------------------------\n");
+
+	while (1) {
+		for (i = 0; i < count; i++) {
+			if (sys[i].arrive_time == time_total) sys[i].isexcute = 1;		// 현재 시간 == 도착 시간 프로세스 실행 중 여부 판단하는 변수 1로 변경
+
+			if (sys[i].isexcute == 1 && isinrpt == 1) {	// 인터럽트가 발생하면 현재 실행 중인 프로세스 중 가장 대기 시간이 긴 프로세스 탐색
+					// 후 max_wait_index의 인덱스 값 저장
+				if (sys[i].burst_time != 0 && sys[i].wait_time >= sys[max_wait_index].wait_time) {
+					/*
+					if (sys[i].wait_time == sys[max_wait_index].wait_time)	// 대기 시간이 같을 경우 프로세스 pid가 낮은 것부터 실행
+						max_wait_index = (sys[i].pid < sys[max_wait_index].pid) ? i : max_wait_index;
+					else
+					*/
+					max_wait_index = i;
+				}
+			}
+		}
+		sys[max_wait_index].wait_time = 0;		// 실행 했으므로 대기 시간 0으로 초기화
+		sys[max_wait_index].burst_time--;		// 실행 했으므로 서비스 시간 -1
+		temp_time++;							// q=4이므로 4가 되면 종료되도록 비교
+
+		for (i = 0; i < count; i++) {
+			if (i != max_wait_index && sys[i].isexcute == 1)	// 현재 실행 중인 프로세스가 아니며 대기 중인 프로세스면 대기 시간 +1
+			{
+				sys[i].wait_time++;
+				waittime_sum++;
+			}
+				
+		}
+
+		if (sys[max_wait_index].burst_time != 0 && temp_time != time_quantum) {	// 현재 실행 중인 프로세스의 서비스 타임 0이거나, 4초 연속으로 실행되었으면 중단
+			isinrpt = 0;
+		}
+		else {
+			if (sys[max_wait_index].burst_time == 0) {	//서비스 시간 = 0 으로 종료되었으므로 출력
+				t = max_wait_index;
+				sys[t].isexcute = 0;
+				printf("\nPID:%d\t\t%d \t\t %d\t\t %d\t\t %d\t\t\t %.2f", copy_sys[t].pid, copy_sys[t].burst_time,copy_sys[t].arrive_time, time_total + 1, time_total + 1 - copy_sys[t].arrive_time, (time_total + 1 - copy_sys[t].arrive_time) / (double)copy_sys[t].burst_time);
+
+				//printf("%d\t\t %ds\t\t  %ds\t\t  %ds\t\t %ds\t\t %.2fs \n\n", copy_sys[t].pid, copy_sys[t].arrive_time, copy_sys[t].burst_time,
+					//time_total + 1, time_total + 1 - copy_sys[t].arrive_time, (time_total + 1 - copy_sys[t].arrive_time) / (double)copy_sys[t].burst_time);
+				exit++;
+			}
+			temp_time = 0;	// q=4와 비교할 시간 값 0으로 다시 초기화
+			isinrpt = 1;		// 인터럽트 발생 여부 변수 1로변경하여 인터럽트 발생
+		}
+
+		time_total++;		// 1초 증가
+
+		if (exit == count) break;	// 프로세스 개수 == 종료된 프로세스 개수 면 while문 종료
+	}
+
+	printf("\nTotal Time : %d \n", time_total);
+
+	return 0;
+}
